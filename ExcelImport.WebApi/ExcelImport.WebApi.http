@@ -1,0 +1,6 @@
+@ExcelImport.WebApi_HostAddress = http://localhost:5085
+
+GET {{ExcelImport.WebApi_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

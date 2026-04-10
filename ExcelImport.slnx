@@ -1,0 +1,9 @@
+<Solution>
+  <Folder Name="/Template/">
+    <File Path="Template/cell-template.json" />
+    <File Path="Template/row-template.json" />
+  </Folder>
+  <Project Path="ExcelImport.Core/ExcelImport.Core.csproj" />
+  <Project Path="ExcelImport.WebApi/ExcelImport.WebApi.csproj" />
+  <Project Path="ExcelImport.WinForms/ExcelImport.WinForms.csproj" />
+</Solution>

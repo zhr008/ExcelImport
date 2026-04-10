@@ -1,0 +1,17 @@
+{
+  "ReadMode": "Row",
+  "StartRow": 2,
+  "Fields": [
+    { "Name": "TestId", "Column": "A", "Type": "string", "IsKey":true, "Required": true },
+    { "Name": "MeasuringSide", "Column": "B", "Type": "string", "Length": 10 },
+    { "Name": "TaskNumber", "Column": "C", "Type": "string", "Length": 100 },
+    { "Name": "Description", "Column": "D", "Type": "string", "Length": 500 },
+    { "Name": "TestTime", "Column": "E", "Type": "datetime" , "IsKey":true, "Required": true },
+    { "Name": "Operator", "Column": "F", "Type": "string", "Length": 50 },
+    { "Name": "IsPass", "Column": "G", "Type": "bool" },
+    { "Name": "Wavelength1310_IL", "Column": "H", "Type": "decimal" },
+    { "Name": "Wavelength1310_RL", "Column": "I", "Type": "decimal" },
+    { "Name": "Wavelength1550_IL", "Column": "J", "Type": "decimal" },
+    { "Name": "Wavelength1550_RL", "Column": "K", "Type": "decimal" }
+  ]
+}

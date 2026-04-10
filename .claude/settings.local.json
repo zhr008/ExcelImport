@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new:*)",
+      "Bash(dotnet add:*)",
+      "Bash(dotnet build:*)",
+      "Bash([ -f \"D:/ExcelImport/ExcelImport.sln\" ])",
+      "Bash(dotnet sln:*)",
+      "Bash(python -)",
+      "Bash(cp -f \"D:/ExcelImport/src/ExcelImport.WinForms/Schemas/row-schema.json\" \"D:/ExcelImport/Schemas/row-schema.json\")",
+      "Bash(cp -f \"D:/ExcelImport/src/ExcelImport.WinForms/Schemas/cell-schema.json\" \"D:/ExcelImport/Schemas/cell-schema.json\")",
+      "Bash(dotnet publish:*)",
+      "Bash(dotnet clean:*)",
+      "Bash(cmd.exe:*)",
+      "Bash(cp:*)"
+    ]
+  }
+}

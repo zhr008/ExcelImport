@@ -1,0 +1,14 @@
+{
+  "ReadMode": "Cell",
+  "Fields": [
+    { "Name": "TestId", "Cell": "A2", "Type": "string", "IsKey":true, "Required": true },
+    { "Name": "MeasuringSide", "Cell": "B2", "Type": "string", "Length": 10 },
+    { "Name": "TaskNumber", "Cell": "C2", "Type": "string", "Length": 100 },
+    { "Name": "Description", "Cell": "A6", "Type": "string", "Length": 500 },
+    { "Name": "TestTime", "Cell": "B6", "Type": "datetime", "IsKey":true, "Required": true },
+    { "Name": "Operator", "Cell": "C6", "Type": "string", "Length": 50 },
+    { "Name": "IsPass", "Cell": "A9", "Type": "bool" },
+    { "Name": "Wavelength1310_IL", "Cell": "B9", "Type": "decimal" },
+    { "Name": "Wavelength1310_RL", "Cell": "C9", "Type": "decimal" }
+  ]
+}
