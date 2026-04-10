@@ -1,5 +1,7 @@
+using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Unicode;
 using ExcelImport.Core.Models.Template;
 using ExcelImport.Core.Services;
 
@@ -11,6 +13,7 @@ public sealed class ConfigService
     {
         PropertyNameCaseInsensitive = true,
         WriteIndented = true,
+        Encoder = JavaScriptEncoder.Create(UnicodeRanges.All),
         Converters = { new JsonStringEnumConverter(JsonNamingPolicy.CamelCase, allowIntegerValues: true) }
     };
 

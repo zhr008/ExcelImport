@@ -71,8 +71,8 @@ public sealed class RecordFormatterService
     {
         return text.Trim().ToUpperInvariant() switch
         {
-            "TRUE" or "1" or "Y" or "YES" or "PASS" => true,
-            "FALSE" or "0" or "N" or "NO" or "FAIL" => false,
+            "TRUE" or "1" or "Y" or "YES" or "PASS" or "通过" => true,
+            "FALSE" or "0" or "N" or "NO" or "FAIL" or "不通过"=> false,
             _ => bool.Parse(text)
         };
     }
