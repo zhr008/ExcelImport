@@ -26,13 +26,33 @@ public sealed class RecordFormatterService
         return formatted;
     }
 
+    public bool IsValidRecord(Dictionary<string, object?> record, ExcelTemplateDefinition template)
+    {
+        foreach (var field in template.Fields)
+        {
+            if (field.Required)
+            {
+                if (!record.TryGetValue(field.Name, out var value) || value is null)
+                {
+                    return false;
+                }
+                var text = value.ToString()?.Trim();
+                if (string.IsNullOrWhiteSpace(text))
+                {
+                    return false;
+                }
+            }
+        }
+        return true;
+    }
+
     private static object? ConvertValue(ExcelTemplateFieldDefinition field, object? value)
     {
         if (value is null)
         {
             if (field.Required)
             {
-                throw new InvalidOperationException($"字段 {field.Name} 不允许为空。");
+                return null;
             }
 
             return null;
@@ -43,7 +63,7 @@ public sealed class RecordFormatterService
         {
             if (field.Required)
             {
-                throw new InvalidOperationException($"字段 {field.Name} 不允许为空。");
+                return null;
             }
 
             return null;
@@ -53,7 +73,9 @@ public sealed class RecordFormatterService
         {
             "int" => int.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
             "decimal" => decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
-            "datetime" => DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
+            "datetime" => ParseDateTime(field, text),
+            "date" => ParseDate(field, text),
+            "time" => ParseTime(text),
             "bool" => ParseBoolean(text),
             "string" => text,
             _ => text
@@ -65,6 +87,48 @@ public sealed class RecordFormatterService
         }
 
         return converted;
+    }
+
+    private static string ParseDateTime(ExcelTemplateFieldDefinition field, string text)
+    {
+        var dateTime = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        
+        if (!string.IsNullOrWhiteSpace(field.Format))
+        {
+            return dateTime.ToString(ParseFormatString(field.Format));
+        }
+        
+        return dateTime.ToString("yyyy-MM-dd HH:mm:ss");
+    }
+
+    private static string ParseDate(ExcelTemplateFieldDefinition field, string text)
+    {
+        var dateTime = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        
+        if (!string.IsNullOrWhiteSpace(field.Format))
+        {
+            return dateTime.ToString(ParseFormatString(field.Format));
+        }
+        
+        return dateTime.ToString("yyyy-MM-dd");
+    }
+
+    private static string ParseTime(string text)
+    {
+        var dateTime = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        return dateTime.ToString("HH:mm:ss");
+    }
+
+    private static string ParseFormatString(string format)
+    {
+        return format.ToLowerInvariant() switch
+        {
+            "yyyy-mm-dd" => "yyyy-MM-dd",
+            "yyyy/mm/dd" => "yyyy/MM/dd",
+            "yyyy-mm-dd hh:mm:ss" => "yyyy-MM-dd HH:mm:ss",
+            "yyyy/mm/dd hh:mm:ss" => "yyyy/MM/dd HH:mm:ss",
+            _ => format
+        };
     }
 
     private static bool ParseBoolean(string text)

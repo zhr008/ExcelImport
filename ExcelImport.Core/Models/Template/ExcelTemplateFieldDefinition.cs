@@ -15,4 +15,6 @@ public sealed class ExcelTemplateFieldDefinition
     public int? Length { get; set; }
 
     public bool IsKey { get; set; }
+
+    public string? Format { get; set; }
 }

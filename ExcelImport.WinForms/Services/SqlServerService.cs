@@ -8,6 +8,12 @@ namespace ExcelImport.Services;
 public sealed class SqlServerService
 {
     private static readonly Regex TableNamePattern = new(@"^[A-Za-z0-9_\.\[\]]+$", RegexOptions.Compiled);
+    private readonly LoggingService _loggingService;
+
+    public SqlServerService(LoggingService loggingService)
+    {
+        _loggingService = loggingService;
+    }
 
     public async Task<int> InsertAsync(string connectionString, string tableName, ExcelTemplateDefinition template, IReadOnlyList<Dictionary<string, object?>> records, CancellationToken cancellationToken)
     {
@@ -32,18 +38,43 @@ public sealed class SqlServerService
         await connection.OpenAsync(cancellationToken);
 
         var inserted = 0;
-        foreach (var record in records)
+        
+        // 使用批量插入优化性能
+        using (var transaction = connection.BeginTransaction())
         {
-            await using var command = connection.CreateCommand();
-            command.CommandType = CommandType.Text;
-            command.CommandText = BuildInsertCommand(tableName, record.Keys, keyFields);
-
-            foreach (var pair in record)
+            try
             {
-                command.Parameters.AddWithValue($"@{pair.Key}", pair.Value ?? DBNull.Value);
-            }
+                foreach (var record in records)
+                {
+                    try
+                    {
+                        using var command = connection.CreateCommand();
+                        command.Transaction = transaction;
+                        command.CommandType = CommandType.Text;
+                        command.CommandText = BuildInsertCommand(tableName, record.Keys, keyFields);
 
-            inserted += await command.ExecuteNonQueryAsync(cancellationToken);
+                        foreach (var pair in record)
+                        {
+                            command.Parameters.AddWithValue($"@{pair.Key}", pair.Value ?? DBNull.Value);
+                        }
+
+                        inserted += command.ExecuteNonQuery();
+                    }
+                    catch (Exception ex)
+                    {
+                        _loggingService.Error($"插入记录失败: {ex.Message}", ex);
+                        // 继续处理其他记录
+                    }
+                }
+                
+                transaction.Commit();
+            }
+            catch (Exception ex)
+            {
+                transaction.Rollback();
+                _loggingService.Error($"批量插入事务失败: {ex.Message}", ex);
+                throw;
+            }
         }
 
         return inserted;

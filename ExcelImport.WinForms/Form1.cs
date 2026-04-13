@@ -34,9 +34,9 @@ public partial class Form1 : Form
         _startupService = new StartupService();
         _excelReaderService = new ExcelReaderService();
         _recordFormatterService = new RecordFormatterService();
-        _sqlServerService = new SqlServerService();
         _webApiService = new WebApiService();
         _loggingService = new LoggingService(_baseDirectory, () => _settings);
+        _sqlServerService = new SqlServerService(_loggingService);
         _loggingService.LogWritten += AppendLogLine;
         _importService = new ImportService(_configService, _excelReaderService, _recordFormatterService, _sqlServerService, _webApiService, _loggingService);
         _schedulerService = new SchedulerService(_importService, _loggingService);

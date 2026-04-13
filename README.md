@@ -186,7 +186,7 @@ WinForms 端的导入主流程如下：
 8. 根据配置选择导入目标：
    - 直接写入 SQL Server
    - 发送到 WebApi 接口
-9. 成功文件移动到 `Processed` 目录
+9. 成功文件移动到 `Succeed` 目录
 10. 失败文件移动到 `Failed` 目录
 11. 写入日志并统计导入结果
 
@@ -248,7 +248,7 @@ Template/
   "ReadMode": "Row",
   "StartRow": 2,
   "Fields": [
-    { "Name": "TestId", "Column": "A", "Type": "string", "IsKey": true, "Required": true },
+    { "Name": "TestId", "Column": "A&B", "Type": "string", "IsKey": true, "Required": true },
     { "Name": "TestTime", "Column": "E", "Type": "datetime", "IsKey": true, "Required": true }
   ]
 }
@@ -257,7 +257,7 @@ Template/
 含义：
 
 - 从第 2 行开始读取
-- 每个字段对应一个 Excel 列
+- 每个字段可对应一个 Excel 列，或多个列通过 `&` 直接拼接，例如 `A&B`
 - 遇到整行为空时停止读取
 
 实现位置：
@@ -274,7 +274,7 @@ Template/
 {
   "ReadMode": "Cell",
   "Fields": [
-    { "Name": "TestId", "Cell": "A2", "Type": "string", "Required": true },
+    { "Name": "TestId", "Cell": "A2&D2", "Type": "string", "Required": true },
     { "Name": "TestTime", "Cell": "B6", "Type": "datetime", "Required": true }
   ]
 }
@@ -282,7 +282,7 @@ Template/
 
 含义：
 
-- 每个字段直接指定单元格坐标
+- 每个字段可直接指定一个单元格坐标，或多个单元格通过 `&` 直接拼接，例如 `A2&D2`
 - 一份文件通常只生成一条记录
 
 实现位置：
@@ -298,29 +298,72 @@ Template/
 字段含义：
 
 - `Name`：目标字段名
-- `Column`：Row 模式下的 Excel 列名，如 `A`、`B`
-- `Cell`：Cell 模式下的单元格地址，如 `A2`
-- `Type`：字段类型，当前支持 `string`、`int`、`decimal`、`datetime`、`bool`
+- `Column`：Row 模式下的 Excel 列名，如 `A`、`B`；也支持组合写法，如 `A&B`
+- `Cell`：Cell 模式下的单元格地址，如 `A2`；也支持组合写法，如 `A2&D2`
+- `Type`：字段类型，当前支持 `string`、`int`、`decimal`、`datetime`、`date`、`time`、`bool`
 - `Required`：是否必填
 - `Length`：字符串最大长度
 - `IsKey`：是否关键字段
+- `Format`：格式化字符串，用于 `datetime`、`date`、`time` 类型的输出格式控制
 
 ### 6.3 字段格式化规则
 
 记录在导入前会统一经过格式化逻辑处理：
 
+#### 6.3.1 表达式解析规则
+
+- `Column` / `Cell` 支持使用 `&` 组合多个引用，读取时会跳过空白片段并直接拼接；若全部片段都为空，则最终值为 `null`
+- 支持字符串常量：使用单引号包围，如 `'你好'`，例如 `A&'-'&B`
+- 支持四则运算：`+`（加法）、`-`（减法）、`*`（乘法）、`/`（除法），例如 `A+B`、`A-B`、`A*B`、`A/B`
+- 运算出错时（如除以零），结果返回 `null`
+
+#### 6.3.2 类型转换规则
+
 - 空值在必填字段中会报错
 - `int` 使用 `int.Parse`
 - `decimal` 使用 `decimal.Parse`
-- `datetime` 使用 `DateTime.Parse`
+- `datetime` 使用 `DateTime.Parse`，支持 `Format` 属性自定义输出格式
+- `date` 使用 `DateTime.Parse`，支持 `Format` 属性自定义输出格式
+- `time` 使用 `DateTime.Parse`，自动格式化为 `HH:mm:ss`
 - `bool` 支持以下文本：
   - true：`TRUE`、`1`、`Y`、`YES`、`PASS`
   - false：`FALSE`、`0`、`N`、`NO`、`FAIL`
 - 字符串可按 `Length` 限制最大长度
 
+#### 6.3.3 日期时间格式化规则
+
+**datetime 类型**：
+- 默认格式：`yyyy-MM-dd HH:mm:ss`
+- 支持格式：
+  - `yyyy-mm-dd hh:mm:ss` → `yyyy-MM-dd HH:mm:ss`
+  - `yyyy/mm/dd hh:mm:ss` → `yyyy/MM/dd HH:mm:ss`
+- 示例：
+```json
+{ "Name": "TestTime", "Column": "E", "Type": "datetime", "Format": "yyyy-MM-dd HH:mm:ss", "Required": true }
+```
+
+**date 类型**：
+- 默认格式：`yyyy-MM-dd`
+- 支持格式：
+  - `yyyy-mm-dd` → `yyyy-MM-dd`
+  - `yyyy/mm/dd` → `yyyy/MM/dd`
+- 示例：
+```json
+{ "Name": "TestDate", "Column": "F", "Type": "date", "Format": "yyyy-MM-dd", "Required": true }
+```
+
+**time 类型**：
+- 固定格式：`HH:mm:ss`
+- 不支持自定义格式
+- 示例：
+```json
+{ "Name": "TestTimeOnly", "Column": "G", "Type": "time", "Required": true }
+```
+
 实现位置：
 
 - `ExcelImport.Core/Services/RecordFormatterService.cs:15`
+- `ExcelImport.WinForms/Services/ExcelReaderService.cs:88`
 
 ---
 
@@ -517,8 +560,8 @@ WebApi 默认配置文件：
 WinForms 扫描目录中的 Excel 文件后，会按修改日期决定是否移动文件：
 
 - 修改日期不是当天：处理完成后移动
-  - 成功：移动到 `Succeed`
-  - 失败：移动到 `Failed`
+  - 成功：移动到 `Succeed` 目录
+  - 失败：移动到 `Failed` 目录
 - 修改日期是当天：处理完成后不移动，保留在原目录，允许后续继续执行
 
 规则实现位于：
@@ -742,7 +785,6 @@ Swagger 已在程序启动时注册：
 - 监控目录：`D:\ExcelImport\Excel\Cell`
 - 目标表：`dbo.ExcelImportCell`
 - 文件类型：`*.xlsx`
-
 ---
 
 ## 17. 注意事项
@@ -752,8 +794,20 @@ Swagger 已在程序启动时注册：
 3. 至少启用一种导入方式：`Database.Enabled` 或 `WebApi.Enabled`
 4. WebApi 模式下，服务端仍会再次按模板做校验和格式化
 5. Excel 文件处理完成后会被移动，因此监控目录建议只放待处理文件
-6. `Processed` 和 `Failed` 目录不要手动作为监控目录
+6. `Succeed` 和 `Failed` 目录不要手动作为监控目录
 7. 数据库表结构需要与模板字段保持一致
+8. **表达式解析注意事项**：
+   - 字符串常量必须用单引号包围，如 `'你好'`
+   - 四则运算出错时（如除以零），结果会返回 `null`
+   - 运算符优先级：从左到右依次计算，不支持括号
+   - 混合类型运算时会尝试转换为数值类型，转换失败则返回 `null`
+   - 拼接操作（&）会将 null 值视为空字符串，其他操作需要两个值都不为 null
+9. **日期时间格式注意事项**：
+   - `datetime`、`date`、`time` 类型都会先解析为 `DateTime` 对象
+   - `Format` 属性不区分大小写，会自动转换格式字符串
+   - `time` 类型固定输出 `HH:mm:ss` 格式，不支持自定义格式
+   - 系统能够自动识别并处理纯时间值（日期部分为 1900-01-01 或 1899-12-31）
+   - 系统能够自动识别并处理完整的日期时间值（时间部分不为 00:00:00）
 
 ---
 
@@ -761,13 +815,15 @@ Swagger 已在程序启动时注册：
 
 如果后续要继续增强，比较适合扩展的方向包括：
 
-- 支持更多字段类型
+- 支持更多字段类型（已完成：date、time）
 - 支持自定义字段转换器
 - 支持多工作表读取
 - 支持失败重试
 - 支持归档策略
 - 支持按模板配置不同数据库连接
 - 支持导入前预检查和预览
+- 支持更复杂的表达式解析（如括号、函数等）
+- 支持更多日期时间格式
 
 ---
 

@@ -70,8 +70,17 @@ public sealed class ImportService
             try
             {
                 var rawRecords = _excelReaderService.Read(file, temp);
-                var formattedRecords = _recordFormatterService.FormatRecords(rawRecords, temp);
+                
+                // 过滤无效记录（必填字段为空的记录）
+                var validRawRecords = rawRecords.Where(record => _recordFormatterService.IsValidRecord(record, temp)).ToList();
+                
+                var formattedRecords = _recordFormatterService.FormatRecords(validRawRecords, temp);
                 var records = formattedRecords.Select(x => x.Values).ToList();
+                
+                if (rawRecords.Count > validRawRecords.Count)
+                {
+                    _loggingService.Warning($"文件 {file} 中有 {rawRecords.Count - validRawRecords.Count} 条记录因必填字段为空被跳过。");
+                }
                 var importedCount = 0;
 
                 if (appSettings.Database.Enabled)
