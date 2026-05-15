@@ -66,7 +66,8 @@ public sealed class RecordFormatterService
         object converted = field.Type.ToLowerInvariant() switch
         {
             "int" => int.Parse(FilterNumericText(text), System.Globalization.CultureInfo.InvariantCulture),
-            "decimal" => ParseDecimal(field, text),
+            "float" or "single" => float.Parse(FilterNumericText(text), System.Globalization.CultureInfo.InvariantCulture),
+            "decimal" => ParseDecimal(field, decimal.Parse(FilterNumericText(text), System.Globalization.CultureInfo.InvariantCulture)),
             "datetime" => ParseDateTime(field, text),
             "date" => ParseDate(field, text),
             "time" => ParseTime(text),
@@ -98,11 +99,8 @@ public sealed class RecordFormatterService
         return Regex.Replace(text, NumericFilterPattern, string.Empty);
     }
 
-    private static decimal ParseDecimal(ExcelTemplateFieldDefinition field, string text)
+    private static decimal ParseDecimal(ExcelTemplateFieldDefinition field, decimal value)
     {
-        var cleanedText = FilterNumericText(text);
-        var value = decimal.Parse(cleanedText, System.Globalization.CultureInfo.InvariantCulture);
-        
         var scale = ExtractDecimalScale(field);
         if (scale.HasValue)
         {
