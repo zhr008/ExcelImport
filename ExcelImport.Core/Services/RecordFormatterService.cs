@@ -1,10 +1,13 @@
 using ExcelImport.Core.Models;
 using ExcelImport.Core.Models.Template;
+using System.Text.RegularExpressions;
 
 namespace ExcelImport.Core.Services;
 
 public sealed class RecordFormatterService
 {
+    private const string NumericFilterPattern = @"[><=+\(\)@#\$%^&\*]";
+    
     public List<DynamicEntityRecord> FormatRecords(IEnumerable<Dictionary<string, object?>> records, ExcelTemplateDefinition template)
     {
         return records.Select(record => new DynamicEntityRecord
@@ -36,7 +39,7 @@ public sealed class RecordFormatterService
                 {
                     return false;
                 }
-                var text = value.ToString()?.Trim();
+                var text = CleanText(value.ToString());
                 if (string.IsNullOrWhiteSpace(text))
                 {
                     return false;
@@ -50,29 +53,20 @@ public sealed class RecordFormatterService
     {
         if (value is null)
         {
-            if (field.Required)
-            {
-                return null;
-            }
-
-            return null;
+            return field.Required ? null : null;
         }
 
-        var text = value.ToString()?.Trim();
+        var text = CleanText(value.ToString());
         if (string.IsNullOrWhiteSpace(text))
         {
-            if (field.Required)
-            {
-                return null;
-            }
-
-            return null;
+            return field.Required ? null : null;
         }
+
 
         object converted = field.Type.ToLowerInvariant() switch
         {
-            "int" => int.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
-            "decimal" => decimal.Parse(text, System.Globalization.CultureInfo.InvariantCulture),
+            "int" => int.Parse(FilterNumericText(text), System.Globalization.CultureInfo.InvariantCulture),
+            "decimal" => ParseDecimal(field, text),
             "datetime" => ParseDateTime(field, text),
             "date" => ParseDate(field, text),
             "time" => ParseTime(text),
@@ -89,34 +83,96 @@ public sealed class RecordFormatterService
         return converted;
     }
 
-    private static string ParseDateTime(ExcelTemplateFieldDefinition field, string text)
+    private static string CleanText(string? text)
     {
-        var dateTime = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
-        
-        if (!string.IsNullOrWhiteSpace(field.Format))
+        if (string.IsNullOrEmpty(text))
         {
-            return dateTime.ToString(ParseFormatString(field.Format));
+            return string.Empty;
+        }
+
+        return text.Replace("\r", "").Replace("\n", " ").Replace("\t", " ").Trim();
+    }
+
+    private static string FilterNumericText(string text)
+    {
+        return Regex.Replace(text, NumericFilterPattern, string.Empty);
+    }
+
+    private static decimal ParseDecimal(ExcelTemplateFieldDefinition field, string text)
+    {
+        var cleanedText = FilterNumericText(text);
+        var value = decimal.Parse(cleanedText, System.Globalization.CultureInfo.InvariantCulture);
+        
+        var scale = ExtractDecimalScale(field);
+        if (scale.HasValue)
+        {
+            value = decimal.Round(value, scale.Value);
         }
         
-        return dateTime.ToString("yyyy-MM-dd HH:mm:ss");
+        return value;
+    }
+
+    private static int? ExtractDecimalScale(ExcelTemplateFieldDefinition field)
+    {
+        if (!string.IsNullOrWhiteSpace(field.Format))
+        {
+            var formatMatch = Regex.Match(field.Format, @"^(\d+),(\d+)$");
+            if (formatMatch.Success)
+            {
+                return int.Parse(formatMatch.Groups[2].Value);
+            }
+        }
+        
+        return null;
+    }
+
+    private static string ParseDateTime(ExcelTemplateFieldDefinition field, string text)
+    {
+        var cleanedText = CleanText(text);
+        
+        if (DateTime.TryParse(cleanedText, System.Globalization.CultureInfo.InvariantCulture, 
+            System.Globalization.DateTimeStyles.None, out var dateTime))
+        {
+            if (!string.IsNullOrWhiteSpace(field.Format))
+            {
+                return dateTime.ToString(ParseFormatString(field.Format));
+            }
+            
+            return dateTime.ToString("yyyy-MM-dd HH:mm:ss");
+        }
+        
+        throw new FormatException($"无法将 '{cleanedText}' 解析为 DateTime。");
     }
 
     private static string ParseDate(ExcelTemplateFieldDefinition field, string text)
     {
-        var dateTime = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
+        var cleanedText = CleanText(text);
         
-        if (!string.IsNullOrWhiteSpace(field.Format))
+        if (DateTime.TryParse(cleanedText, System.Globalization.CultureInfo.InvariantCulture, 
+            System.Globalization.DateTimeStyles.None, out var dateTime))
         {
-            return dateTime.ToString(ParseFormatString(field.Format));
+            if (!string.IsNullOrWhiteSpace(field.Format))
+            {
+                return dateTime.ToString(ParseFormatString(field.Format));
+            }
+            
+            return dateTime.ToString("yyyy-MM-dd");
         }
         
-        return dateTime.ToString("yyyy-MM-dd");
+        throw new FormatException($"无法将 '{cleanedText}' 解析为 Date。");
     }
 
     private static string ParseTime(string text)
     {
-        var dateTime = DateTime.Parse(text, System.Globalization.CultureInfo.InvariantCulture);
-        return dateTime.ToString("HH:mm:ss");
+        var cleanedText = CleanText(text);
+        
+        if (DateTime.TryParse(cleanedText, System.Globalization.CultureInfo.InvariantCulture, 
+            System.Globalization.DateTimeStyles.None, out var dateTime))
+        {
+            return dateTime.ToString("HH:mm:ss");
+        }
+        
+        throw new FormatException($"无法将 '{cleanedText}' 解析为 Time。");
     }
 
     private static string ParseFormatString(string format)
@@ -127,6 +183,8 @@ public sealed class RecordFormatterService
             "yyyy/mm/dd" => "yyyy/MM/dd",
             "yyyy-mm-dd hh:mm:ss" => "yyyy-MM-dd HH:mm:ss",
             "yyyy/mm/dd hh:mm:ss" => "yyyy/MM/dd HH:mm:ss",
+            "yyyy年mm月dd日" => "yyyy年MM月dd日",
+            "yyyy年mm月dd日 hh时mm分ss秒" => "yyyy年MM月dd日 HH时mm分ss秒",
             _ => format
         };
     }
@@ -136,7 +194,7 @@ public sealed class RecordFormatterService
         return text.Trim().ToUpperInvariant() switch
         {
             "TRUE" or "1" or "Y" or "YES" or "PASS" or "通过" => true,
-            "FALSE" or "0" or "N" or "NO" or "FAIL" or "不通过"=> false,
+            "FALSE" or "0" or "N" or "NO" or "FAIL" or "不通过" => false,
             _ => bool.Parse(text)
         };
     }

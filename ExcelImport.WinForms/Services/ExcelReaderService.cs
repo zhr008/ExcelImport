@@ -11,6 +11,7 @@ public sealed class ExcelReaderService
     private static readonly Regex CellPattern = new("^[A-Za-z]+[1-9][0-9]*$", RegexOptions.Compiled);
     private static readonly Regex StringLiteralPattern = new("^'([^']*)'$", RegexOptions.Compiled);
     private static readonly Regex NumericPattern = new(@"^-?\d+(\.\d+)?$", RegexOptions.Compiled);
+    private static readonly Regex NumericFilterPattern = new(@"[><=+\(\)@#\$%^&\*]", RegexOptions.Compiled);
 
     public List<Dictionary<string, object?>> Read(string filePath, ExcelTemplateDefinition template)
     {
@@ -261,52 +262,12 @@ public sealed class ExcelReaderService
             switch (op)
             {
                 case "&":
-                    // 字符串拼接
                     return left.ToString() + right.ToString();
                 case "+":
-                    // 加法
-                    if (left is decimal leftDec1 && right is decimal rightDec1)
-                    {
-                        return leftDec1 + rightDec1;
-                    }
-                    else if (double.TryParse(left.ToString(), out var leftDouble1) && double.TryParse(right.ToString(), out var rightDouble1))
-                    {
-                        return leftDouble1 + rightDouble1;
-                    }
-                    return null;
                 case "-":
-                    // 减法
-                    if (left is decimal leftDec2 && right is decimal rightDec2)
-                    {
-                        return leftDec2 - rightDec2;
-                    }
-                    else if (double.TryParse(left.ToString(), out var leftDouble2) && double.TryParse(right.ToString(), out var rightDouble2))
-                    {
-                        return leftDouble2 - rightDouble2;
-                    }
-                    return null;
                 case "*":
-                    // 乘法
-                    if (left is decimal leftDec3 && right is decimal rightDec3)
-                    {
-                        return leftDec3 * rightDec3;
-                    }
-                    else if (double.TryParse(left.ToString(), out var leftDouble3) && double.TryParse(right.ToString(), out var rightDouble3))
-                    {
-                        return leftDouble3 * rightDouble3;
-                    }
-                    return null;
                 case "/":
-                    // 除法
-                    if (left is decimal leftDec4 && right is decimal rightDec4 && rightDec4 != 0)
-                    {
-                        return leftDec4 / rightDec4;
-                    }
-                    else if (double.TryParse(left.ToString(), out var leftDouble4) && double.TryParse(right.ToString(), out var rightDouble4) && rightDouble4 != 0)
-                    {
-                        return leftDouble4 / rightDouble4;
-                    }
-                    return null;
+                    return ApplyArithmeticOperation(left, right, op);
                 default:
                     return null;
             }
@@ -315,6 +276,58 @@ public sealed class ExcelReaderService
         {
             return null;
         }
+    }
+
+    private static object? ApplyArithmeticOperation(object left, object right, string op)
+    {
+        var leftValue = ParseNumericValue(left);
+        var rightValue = ParseNumericValue(right);
+        
+        if (leftValue == null || rightValue == null)
+        {
+            return null;
+        }
+
+        switch (op)
+        {
+            case "+":
+                return leftValue.Value + rightValue.Value;
+            case "-":
+                return leftValue.Value - rightValue.Value;
+            case "*":
+                return leftValue.Value * rightValue.Value;
+            case "/":
+                if (rightValue.Value == 0)
+                {
+                    return null;
+                }
+                return leftValue.Value / rightValue.Value;
+            default:
+                return null;
+        }
+    }
+
+    private static decimal? ParseNumericValue(object value)
+    {
+        if (value is decimal dec)
+        {
+            return dec;
+        }
+
+        var text = value.ToString();
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var cleanedText = NumericFilterPattern.Replace(text, string.Empty);
+        
+        if (decimal.TryParse(cleanedText, CultureInfo.InvariantCulture, out var result))
+        {
+            return result;
+        }
+
+        return null;
     }
 
     private static object? ReadRawValue(XLCellValue rawValue)
