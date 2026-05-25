@@ -53,7 +53,7 @@ public sealed class ImportService
         var temp = _configService.LoadTemplate(template.TemplateFile);
         var option = template.IncludeSubdirectories ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
         var files = Directory.GetFiles(template.WatchPath, template.FilePattern, option)
-            .Where(file => !IsInSystemFolder(file, template.WatchPath))
+            .Where(file => !IsInSystemFolder(file, template.WatchPath) && !IsExcelTempFile(file))
             .ToList();
 
         result.FilesScanned = files.Count;
@@ -128,6 +128,14 @@ public sealed class ImportService
         var relativePath = Path.GetRelativePath(watchPath, filePath);
         return relativePath.StartsWith("Succeed", StringComparison.OrdinalIgnoreCase)
                || relativePath.StartsWith("Failed", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool IsExcelTempFile(string filePath)
+    {
+        var fileName = Path.GetFileName(filePath);
+        var fileInfo = new FileInfo(filePath);
+        return (fileInfo.Attributes & FileAttributes.Hidden) == FileAttributes.Hidden
+               && fileName.StartsWith("~$", StringComparison.OrdinalIgnoreCase);
     }
 
     private static void MoveToFolder(string filePath, string watchPath, bool success, LoggingService loggingService)

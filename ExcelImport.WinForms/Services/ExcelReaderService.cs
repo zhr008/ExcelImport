@@ -15,7 +15,8 @@ public sealed class ExcelReaderService
 
     public List<Dictionary<string, object?>> Read(string filePath, ExcelTemplateDefinition template)
     {
-        using var workbook = new XLWorkbook(filePath);
+        using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+        using var workbook = new XLWorkbook(stream);
         var worksheet = workbook.Worksheet(1);
 
         return template.ReadMode switch
