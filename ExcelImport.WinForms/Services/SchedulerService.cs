@@ -8,13 +8,16 @@ public sealed class SchedulerService : IDisposable
 {
     private readonly ImportService _importService;
     private readonly LoggingService _loggingService;
+    private readonly RecordCacheService _recordCacheService;
     private readonly ConcurrentDictionary<string, System.Threading.Timer> _timers = new(StringComparer.OrdinalIgnoreCase);
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new(StringComparer.OrdinalIgnoreCase);
+    private System.Threading.Timer? _cleanupTimer;
 
-    public SchedulerService(ImportService importService, LoggingService loggingService)
+    public SchedulerService(ImportService importService, LoggingService loggingService, RecordCacheService recordCacheService)
     {
         _importService = importService;
         _loggingService = loggingService;
+        _recordCacheService = recordCacheService;
     }
 
     public void Start(AppSettings settings)
@@ -31,6 +34,17 @@ public sealed class SchedulerService : IDisposable
             var timer = new System.Threading.Timer(_ => QueueTemplateExecution(settings, template), null, TimeSpan.Zero, TimeSpan.FromMinutes(Math.Max(1, template.IntervalMinutes)));
             _timers[template.Name] = timer;
         }
+
+        // 启动缓存清理定时器（每天9点执行）
+        var now = DateTime.Now;
+        var nextRun = new DateTime(now.Year, now.Month, now.Day, 9, 0, 0);
+        if (now > nextRun)
+        {
+            nextRun = nextRun.AddDays(1);
+        }
+        var initialDelay = nextRun - now;
+        _cleanupTimer = new System.Threading.Timer(_ => CleanupCache(), null, initialDelay, TimeSpan.FromDays(1));
+        _loggingService.Info($"缓存清理定时器已启动，首次执行时间: {nextRun:yyyy-MM-dd HH:mm:ss}");
     }
 
     public void Stop()
@@ -39,6 +53,8 @@ public sealed class SchedulerService : IDisposable
         {
             _loggingService.Info($"停止调度器，清理 {_timers.Count} 个定时任务。");
         }
+
+        _cleanupTimer?.Dispose();
 
         foreach (var timer in _timers.Values)
         {
@@ -97,5 +113,21 @@ public sealed class SchedulerService : IDisposable
     public void Dispose()
     {
         Stop();
+    }
+
+    private async void CleanupCache()
+    {
+        try
+        {
+            _loggingService.Info("开始清理过期缓存记录...");
+            await _recordCacheService.CleanupExpiredRecordsAsync(30); // 保留30天
+            
+            var (total, oldestDays) = await _recordCacheService.GetStatisticsAsync();
+            _loggingService.Info($"缓存统计: 总记录数 {total}，最旧记录 {oldestDays} 天前");
+        }
+        catch (Exception ex)
+        {
+            _loggingService.Error("清理缓存失败", ex);
+        }
     }
 }

@@ -11,6 +11,7 @@ public sealed class ImportService
     private readonly SqlServerService _sqlServerService;
     private readonly WebApiService _webApiService;
     private readonly LoggingService _loggingService;
+    private readonly RecordCacheService _recordCacheService;
 
     public ImportService(
         ConfigService configService,
@@ -18,7 +19,8 @@ public sealed class ImportService
         RecordFormatterService recordFormatterService,
         SqlServerService sqlServerService,
         WebApiService webApiService,
-        LoggingService loggingService)
+        LoggingService loggingService,
+        RecordCacheService recordCacheService)
     {
         _configService = configService;
         _excelReaderService = excelReaderService;
@@ -26,6 +28,7 @@ public sealed class ImportService
         _sqlServerService = sqlServerService;
         _webApiService = webApiService;
         _loggingService = loggingService;
+        _recordCacheService = recordCacheService;
     }
 
     public async Task<ImportResult> RunTemplateAsync(AppSettings appSettings, TemplateTaskConfig template, CancellationToken cancellationToken)
@@ -81,13 +84,30 @@ public sealed class ImportService
                 {
                     _loggingService.Warning($"文件 {file} 中有 {rawRecords.Count - validRawRecords.Count} 条记录因必填字段为空被跳过。");
                 }
+
+                // 使用本地缓存过滤已插入的记录
+                var existingHashes = await _recordCacheService.BatchExistsAsync(template.Name, records);
+                var newRecords = records.Where(r => !existingHashes.Contains(_recordCacheService.ComputeRecordHash(template.Name, r))).ToList();
+                
+                if (records.Count > newRecords.Count)
+                {
+                    _loggingService.Info($"文件 {file} 中有 {records.Count - newRecords.Count} 条记录已在缓存中跳过。");
+                }
+
                 var importedCount = 0;
 
                 if (appSettings.Database.Enabled)
                 {
-                    importedCount = await _sqlServerService.InsertAsync(appSettings.Database.ConnectionString, template.TargetTable, temp, records, cancellationToken);
+                    importedCount = await _sqlServerService.InsertAsync(appSettings.Database.ConnectionString, template.TargetTable, temp, newRecords, cancellationToken);
+                    
+                    // 将成功插入的记录添加到缓存
+                    if (importedCount > 0)
+                    {
+                        await _recordCacheService.BatchAddAsync(template.Name, newRecords.Take(importedCount).ToList());
+                    }
+                    
                     var skippedCount = records.Count - importedCount;
-                    _loggingService.Info($"数据库导入完成: {file}，总记录数: {records.Count}，插入: {importedCount}，重复跳过: {skippedCount}");
+                    _loggingService.Info($"数据库导入完成: {file}，总记录数: {records.Count}，缓存跳过: {records.Count - newRecords.Count}，插入: {importedCount}，重复跳过: {skippedCount}");
                 }
 
                 if (appSettings.WebApi.Enabled)
@@ -98,13 +118,20 @@ public sealed class ImportService
                         FileName = Path.GetFileName(file),
                         TemplateFile = template.TemplateFile,
                         TargetTable = template.TargetTable,
-                        Records = records
+                        Records = newRecords
                     };
 
                     var apiResult = await _webApiService.SendAsync(appSettings.WebApi, payload, cancellationToken);
                     importedCount = apiResult.InsertedCount;
-                    var skippedCount = apiResult.RecordCount - apiResult.InsertedCount;
-                    _loggingService.Info($"WebApi 导入成功: {file}，消息: {apiResult.Message}，接收记录数: {apiResult.RecordCount}，插入: {apiResult.InsertedCount}，重复跳过: {skippedCount}");
+                    
+                    // 将成功插入的记录添加到缓存
+                    if (importedCount > 0)
+                    {
+                        await _recordCacheService.BatchAddAsync(template.Name, newRecords.Take(importedCount).ToList());
+                    }
+                    
+                    var skippedCount = records.Count - importedCount;
+                    _loggingService.Info($"WebApi 导入成功: {file}，消息: {apiResult.Message}，接收记录数: {records.Count}，缓存跳过: {records.Count - newRecords.Count}，插入: {apiResult.InsertedCount}，重复跳过: {skippedCount}");
                 }
 
                 result.FilesSucceeded++;

@@ -17,6 +17,7 @@ public partial class Form1 : Form
     private readonly SqlServerService _sqlServerService;
     private readonly WebApiService _webApiService;
     private readonly LoggingService _loggingService;
+    private readonly RecordCacheService _recordCacheService;
     private readonly ImportService _importService;
     private readonly SchedulerService _schedulerService;
     private readonly TrayService _trayService;
@@ -37,9 +38,10 @@ public partial class Form1 : Form
         _webApiService = new WebApiService();
         _loggingService = new LoggingService(_baseDirectory, () => _settings);
         _sqlServerService = new SqlServerService(_loggingService);
+        _recordCacheService = new RecordCacheService(_loggingService);
         _loggingService.LogWritten += AppendLogLine;
-        _importService = new ImportService(_configService, _excelReaderService, _recordFormatterService, _sqlServerService, _webApiService, _loggingService);
-        _schedulerService = new SchedulerService(_importService, _loggingService);
+        _importService = new ImportService(_configService, _excelReaderService, _recordFormatterService, _sqlServerService, _webApiService, _loggingService, _recordCacheService);
+        _schedulerService = new SchedulerService(_importService, _loggingService, _recordCacheService);
         _trayService = new TrayService(Icon ?? SystemIcons.Application, ShowFromTray, RunNowFromTray, ExitApplication);
 
         Load += Form1_Load;
